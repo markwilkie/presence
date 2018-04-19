@@ -16,7 +16,7 @@
 # INCLUDES & VARIABLES
 # ----------------------------------------------------------------------------------------
 
-Version=0.3.69
+Version=0.3.66
 
 #base directory regardless of installation
 Base=$(dirname "$(readlink -f "$0")")
@@ -86,7 +86,7 @@ function scanForGuests () {
 			#this device name is present
 			if [ "$nameScanResult" != "" ]; then
 				#publish the presence of the guest 
-				publish "/guest/$mqtt_room/$currentGuestDeviceAddress" '100' "$nameScanResult"
+				publish "/$mqtt_room/$currentGuestDeviceAddress" '100' "$nameScanResult"
 			fi
 
 			#iterate the current guest that we're looking for
@@ -130,8 +130,7 @@ function scan () {
 
 function publish () {
 	if [ ! -z "$1" ]; then 
-
-		#set name for 'unkonwn'
+		distance_approx=$(convertTimeToDistance $4)
 		name="$3"
 
 		#if no name, return "unknown"
@@ -142,10 +141,53 @@ function publish () {
 		#timestamp
 		stamp=$(date "+%a %b %d %Y %H:%M:%S GMT%z (%Z)")
 
+		#present or not
+		state="Away"
+		if [ "$2" -gt 90 ]; then
+			state="Present"
+		elif [ "$2" -gt 10 ]; then
+			state="Just Left"
+		fi
+
+		#fix bt mac address
+		macaddress=${1//:/_}
+
 		#post to mqtt
-		$MQTTPubPath -h "$mqtt_address" -u "$mqtt_user" -P "$mqtt_password" -t "$mqtt_topicpath$1" -m "{\"confidence\":\"$2\",\"name\":\"$name\",\"scan_duration_ms\":\"$4\",\"timestamp\":\"$stamp\"}"
+		$MQTTPubPath -h "$mqtt_address" -t "$mqtt_topicpath$macaddress" -m "{\"state\":\"$state\",\"confidence\":\"$2\",\"name\":\"$3\",\"distance\":\"$distance_approx\",\"timestamp\":\"$stamp\"}"
 	fi
 }
+
+# ----------------------------------------------------------------------------------------
+# Translate ms scan times into distance approximation
+# ----------------------------------------------------------------------------------------
+
+function convertTimeToDistance () {
+	#very early ALPHA testing of distance measurement
+	#these numbers can/should be adjusted based on environmental conditions
+
+	#the thought process is that the speed with which a name query is completed
+	#can be used as a proxy for the signal quality between a source and a remote
+	#device. The signal quality might be able to be used as a proxy for distance. 
+
+	#ALPHA ALPHA
+
+	if [ ! -z "$1" ]; then 
+		if [ "$1" -lt 500 ]; then 
+			echo "very close"
+		elif [ "$1" -lt 1000 ]; then 
+			echo "nearby"
+		elif [ "$1" -lt 1500 ]; then 
+			echo "far"
+		elif [ "$1" -lt 2000 ]; then 
+			echo "distant"
+		elif [ "$1" -gt 2000 ]; then 
+			echo "very distant"
+		fi 
+	else
+		echo "undefinable"
+	fi
+}
+
 
 # ----------------------------------------------------------------------------------------
 # Preliminary Notifications
@@ -174,7 +216,7 @@ while (true); do
 	#--------------------------------------
 	for index in "${!macaddress_owners[@]}"
 	do
-		#clear per-loop variables
+		#cache bluetooth results 
 		nameScanResult=""
 
 		#obtain individual address
@@ -182,7 +224,7 @@ while (true); do
 
 		#check for additional blank lines in address file
 		if [ -z "$currentDeviceAddress" ]; then 
-			continue
+			continue;
 		fi
 
 		#mark beginning of scan operation
@@ -204,7 +246,7 @@ while (true); do
 		if [ "$nameScanResult" != "" ]; then
 
 			#no duplicate messages
-			publish "/owner/$mqtt_room/$currentDeviceAddress" '100' "$nameScanResult" "$SCAN_DURATION"
+			publish "/$mqtt_room/$currentDeviceAddress" '100' "$nameScanResult" "$SCAN_DURATION"
 
 			#user status			
 			deviceStatusArray[$index]="100"
@@ -246,9 +288,9 @@ while (true); do
 				#checkstan
 				if [ "$nameScanResultRepeat" != "" ]; then
 					#we know that we must have been at a previously-seen user status
-					publish "/owner/$mqtt_room/$currentDeviceAddress" '100' "$nameScanResultRepeat" "$SCAN_DURATION"
+					publish "/$mqtt_room/$currentDeviceAddress" '100' "$nameScanResult" "$SCAN_DURATION"\
 					deviceStatusArray[$index]="100"
-					deviceNameArray[$index]="$nameScanResultRepeat"
+					deviceNameArray[$index]="$nameScanResult"
 
 					scanForGuests $delayBetweenOwnerScansWhenPresent
 					break
@@ -259,7 +301,7 @@ while (true); do
 				expectedName="${deviceNameArray[$index]}"
 
 				#report confidence drop
-				publish "/owner/$mqtt_room/$currentDeviceAddress" "$percentage" "$expectedName" "$SCAN_DURATION"
+				publish "/$mqtt_room/$currentDeviceAddress" "$percentage" "$expectedName" "$SCAN_DURATION_MILISECONDS"
 
 				#set to percentage
 				deviceStatusArray[$index]="$percentage"
@@ -270,7 +312,7 @@ while (true); do
 
 			#publication of zero confidence in currently-tested device
 			if [ "${deviceStatusArray[$index]}" == "0" ]; then 
-				publish "/owner/$mqtt_room/$currentDeviceAddress" '0'
+				publish "/$mqtt_room/$currentDeviceAddress" '0'
 			fi
 
 			#continue with scan list

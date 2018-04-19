@@ -1,4 +1,4 @@
-delayBetweenOwnerScansWhenAway=7
-delayBetweenOwnerScansWhenPresent=30
-delayBetweenGuestScans=5	
+delayBetweenOwnerScansWhenAway=15
+delayBetweenOwnerScansWhenPresent=60
+delayBetweenGuestScans=15	
 verifyByRepeatedlyQuerying=5 	

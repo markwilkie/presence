@@ -1,0 +1,5 @@
+mqtt_address="192.168.15.24"
+mqtt_user=""
+mqtt_password=""
+mqtt_topicpath="myhome/rpi"
+mqtt_room="hallway"
